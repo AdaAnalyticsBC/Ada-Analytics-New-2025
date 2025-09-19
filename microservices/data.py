@@ -1,5 +1,7 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+import httpx
 import os
 load_dotenv()
 
@@ -19,33 +21,6 @@ r = redis.Redis(
 
 
 app = FastAPI()
-
-### --- M I D D L E W A R E --- ###
-
-@app.middleware("http")
-async def add_timeout(request: Request, call_next):
-    try:
-        response = await call_next(request)
-        return response
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"error": "Request timeout or internal error."})
-
-@app.middleware("http")
-async def add_allowed_origins(request: Request, call_next):
-    response = await call_next(request)
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    return response
-
-@app.middleware("http")
-async def add_polygon_key(request: Request, call_next):
-    request.state.POLYGON_API_KEY = os.getenv("POLYGON_API_KEY")
-    return await call_next(request)
-
-@app.middleware("http")
-async def add_quiver_key(request: Request, call_next):
-    request.state.QUIVER_API_KEY = os.getenv("QUIVER_API_KEY")
-    return await call_next(request)
-
 
 # CORS ------------ #
 
@@ -74,14 +49,21 @@ async def test_redis():
 ## - POLYGON HISTORICAL REST - ##
 
 @app.get("/historical-data")
-async def fetch_historical_data(symbol):
-    # TODO: Implement historical data fetching logic
+async def fetch_historical_data(request: Request, symbol: str):
+    polygon_key = request.state.POLYGON_API_KEY
+    url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/range/1/day/2023-09-01/2023-09-18?apiKey={polygon_key}"
 
-    response = "Historical data endpoint - not yet implemented"
-    
-    return {
-        "Message": f'{response}'
-    }
+    async with httpx.AsyncClient() as client:
+        res = await client.get(url)
+
+    if res.status_code != 200:
+        return JSONResponse(
+            status_code=res.status_code,
+            content={"error": res.text}
+        )
+
+    data = res.json()
+    return {"symbol": symbol, "data": data}
 
 
 ## - POLYGON LIVE WEBSOCKET - ##
