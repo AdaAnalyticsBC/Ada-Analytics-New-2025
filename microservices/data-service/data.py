@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
-from datetime import date
+from utils import Timespan, calculate_dates
 from dotenv import load_dotenv
 import os
 
@@ -19,8 +19,6 @@ r = redis.Redis(
     username="default",
     password=os.getenv('REDIS_PASSWORD'),
 )
-
-
 
 app = FastAPI()
 
@@ -53,17 +51,21 @@ async def test_redis():
 
 POLYGON_KEY = os.getenv("POLYGON_API_KEY")
 
+
 ## - REST - HISTORICAL - ##
 @app.get("/historical-data")
 async def fetch_historical_data(
-    symbol: str = Query(..., description="Ticker symbol (e.g. QQQ, AAPL)", example="QQQ"),
-    start: str = Query('2020-06-19', description="Start date (YYYY-MM-DD)"),
-    end: str = Query(str(date.today()), description="End date (YYYY-MM-DD)"),
-    timespan: str = Query("day")
+    symbol: str = Query(...),
+    mul: int = Query(3),
+    timespan: Timespan = Query("month")
 ):
+    # calulate start and end dates
+    start, end = calculate_dates(mul, timespan.value)
+
     url = (
-        f"https://api.polygon.io/v2/aggs/ticker/{symbol}/range/1/"
-        f"{timespan}/{start}/{end}?adjusted=true&sort=asc&limit=50000&apiKey={POLYGON_KEY}"
+        f"https://api.polygon.io/v2/aggs/ticker/{symbol}/range/{mul}/"
+        f"{timespan.value}/{start}/{end}"
+        f"?adjusted=true&sort=asc&limit=50000&apiKey={POLYGON_KEY}"
     )
 
     async with httpx.AsyncClient() as client:
