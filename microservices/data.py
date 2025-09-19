@@ -1,8 +1,10 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
 import httpx
+from datetime import date
+from dotenv import load_dotenv
 import os
+
 load_dotenv()
 
 
@@ -35,6 +37,7 @@ app.add_middleware(
 
 ### --- A P I   E N D P O I N T S --- ###
 
+## - REDIS - ##
 @app.get("/test-redis")
 async def test_redis():
 
@@ -46,30 +49,40 @@ async def test_redis():
     }
 
 
-## - POLYGON HISTORICAL REST - ##
+## - POLYGON - ##
 
+POLYGON_KEY = os.getenv("POLYGON_API_KEY")
+
+## - REST - HISTORICAL - ##
 @app.get("/historical-data")
-async def fetch_historical_data(request: Request, symbol: str):
-    polygon_key = request.state.POLYGON_API_KEY
-    url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/range/1/day/2023-09-01/2023-09-18?apiKey={polygon_key}"
+async def fetch_historical_data(
+    symbol: str = Query(..., description="Ticker symbol (e.g. QQQ, AAPL)", example="QQQ"),
+    start: str = Query('2020-06-19', description="Start date (YYYY-MM-DD)"),
+    end: str = Query(str(date.today()), description="End date (YYYY-MM-DD)"),
+    timespan: str = Query("day")
+):
+    url = (
+        f"https://api.polygon.io/v2/aggs/ticker/{symbol}/range/1/"
+        f"{timespan}/{start}/{end}?adjusted=true&sort=asc&limit=50000&apiKey={POLYGON_KEY}"
+    )
 
     async with httpx.AsyncClient() as client:
-        res = await client.get(url)
+        response = await client.get(url)
 
-    if res.status_code != 200:
-        return JSONResponse(
-            status_code=res.status_code,
-            content={"error": res.text}
-        )
+    if response.status_code != 200:
+        return {
+            "error": f"Polygon API returned {response.status_code}",
+            "details": response.text
+        }
 
-    data = res.json()
-    return {"symbol": symbol, "data": data}
+    return response.json()
 
 
-## - POLYGON LIVE WEBSOCKET - ##
+## - WEBSOCKET - LIVE - ##
 @app.get("/live-data")
 async def fetch_live_data():
-    # TODO: Implement Live websocket data 
+
+
 
     response = "Live Websocket Data Enpoint - not yet implemented"
 

@@ -1,4 +1,6 @@
 fastapi[standard]
 redis
+httpx
 polygon
+datetime
 dotenv
