@@ -1,0 +1,14 @@
+instruments: [QQQ, SPY]
+lookback_days: 252
+vol_lookback: 63
+z_entry: 2.0
+z_exit: 0.7
+z_stop: 3.5
+stop_persist: 3
+sigma_target_ann: 0.10
+gross_cap: 2.0
+turnover_cap_daily: 0.5
+slippage_bps: 2
+commission_per_share: 0.0005
+borrow_bps: 30
+cointegration_p: 0.05
