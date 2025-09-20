@@ -19,7 +19,6 @@ polygon_client = RESTClient(POLYGON_KEY)
 # ---- M A R K E T  C A L ---- #
 nyse = get_calendar("XNYS")
 
-
 # ---- H E L P E R S  ---- #
 
 def parse_timeframe(tf: str):
@@ -43,45 +42,69 @@ def parse_timeframe(tf: str):
     if unit not in ALLOWED_UNITS:
         raise ValueError(f"Unsupported unit: {unit}")
 
-    return quantity, unit
+    end_date = datetime.today().date()
+    start_estimate = end_date - timedelta(days=365 * 10)
+    schedule = nyse.valid_days(start_estimate, end_date)
+
+    if unit == "day":
+        num_bars = quantity
+    elif unit == "week":
+        num_bars = quantity * 5
+    elif unit == "month":
+        num_bars = quantity * 21
+    elif unit == "year":
+        num_bars = quantity * 252
+    else:
+        num_bars = quantity
+
+    actual_days = list(schedule)[-num_bars:]
+    if not actual_days:
+        raise ValueError("No valid NYSE trading days in range.")
+
+    return quantity, unit, actual_days[0].date().isoformat(), end_date.isoformat(), len(actual_days)
 
 
 def resolve_lookback_window(quantity: int, unit: str):
-    """
-    Determine the appropriate multiplier and unit so we return up to MAX_CANDLE_LIMIT data points.
-    This ensures:
-    - More data points for larger timeframes (e.g., '10 years' yields ~300 months)
-    - Less data for small timeframes (e.g., '7 days' yields daily/hourly data)
-    """
     now = datetime.today().date()
-
+    
+    # Estimate total days from timeframe
     if unit == "minute":
-        total_days = max(1, (quantity * 1) // 1440)  # 1440 minutes/day
-        granularity = ("minute", 15)
+        total_days = max(1, (quantity * 1) // 1440)
     elif unit == "hour":
         total_days = max(1, quantity // 24)
-        granularity = ("minute", 30)
     elif unit == "day":
         total_days = quantity
-        granularity = ("day", 1)
     elif unit == "week":
         total_days = quantity * 7
-        granularity = ("day", 1)
     elif unit == "month":
         total_days = quantity * 30
-        granularity = ("week", 1)
     elif unit == "year":
         total_days = quantity * 365
-        granularity = ("month", 1)
     else:
         total_days = quantity * 30
-        granularity = ("month", 1)
 
-    # Apply lookback window that ensures we don’t exceed 300 candles
-    _, mult = granularity
-    candle_span_days = total_days / MAX_CANDLE_LIMIT
+    # Determine the smallest granularity that keeps us under MAX_CANDLE_LIMIT
+    if total_days <= 5:
+        unit_final, mult = "minute", 5
+    elif total_days <= 20:
+        unit_final, mult = "hour", 1
+    elif total_days <= 60:
+        unit_final, mult = "day", 1
+    elif total_days <= 180:
+        unit_final, mult = "day", 2
+    elif total_days <= 365:
+        unit_final, mult = "day", 3
+    elif total_days <= 730:
+        unit_final, mult = "day", 5
+    elif total_days <= 1095:
+        unit_final, mult = "week", 1
+    elif total_days <= 1825:
+        unit_final, mult = "week", 2
+    else:
+        unit_final, mult = "month", 1
+
     start_date = now - timedelta(days=int(total_days))
-    return granularity[1], granularity[0], start_date.isoformat(), now.isoformat()
+    return mult, unit_final, start_date.isoformat(), now.isoformat()
 
 
 def get_polygon_aggregates(ticker: str, mult: int, unit: str, start: str, end: str):
