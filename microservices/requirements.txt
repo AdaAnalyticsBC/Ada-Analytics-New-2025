@@ -1,7 +1,5 @@
 fastapi[standard]
 redis
-httpx
-enum
-polygon
-python-dateutil
+datetime
+polygon-api-client
 dotenv
