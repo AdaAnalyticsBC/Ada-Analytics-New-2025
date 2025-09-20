@@ -21,8 +21,11 @@ async def root():
     return {
         "Message": "Running data-service",
         "Endpoints": [
-            "1. /historical-datat/{ticker}",
-            "2. /live-data/{ticker}"
+            "1. /historical-data/{ticker} - Historical market data",
+            "2. /live-data/{ticker} - WebSocket live data",
+            "3. /strategy/{strategy_name}/historical-data - Strategy historical data",
+            "4. /strategy/{strategy_name}/chart-data - Strategy chart data",
+            "5. /strategy/{strategy_name}/performance-data - Strategy performance data"
         ]
     }
 
@@ -214,5 +217,177 @@ async def websocket_live_data(websocket: WebSocket, ticker: str):
         }
         await websocket.send_text(json.dumps(error_msg))
         await websocket.close()
+
+
+# Strategy Backtesting and Chart Data Endpoints
+
+@app.get("/strategy/{strategy_name}/historical-data")
+async def get_strategy_historical_data(
+    strategy_name: str,
+    timeframe: str = Query("5Y", description="Time range for historical data"),
+    tickers: str = Query("SOXX,NVDA,AMD", description="Comma-separated list of tickers")
+):
+    """
+    Fetch historical data for all tickers used in a strategy
+    Used for backtesting and chart generation
+    """
+    try:
+        ticker_list = [ticker.strip().upper() for ticker in tickers.split(",")]
+
+        strategy_data = {
+            "strategy_name": strategy_name,
+            "timeframe": timeframe,
+            "tickers": ticker_list,
+            "data": {},
+            "meta": {
+                "description": f"Historical data for {strategy_name} strategy",
+                "generated_at": datetime.now().isoformat(),
+                "timeframe_config": get_timeframe_config(timeframe)
+            }
+        }
+
+        # Fetch data for each ticker
+        for ticker in ticker_list:
+            try:
+                # Use existing helper function
+                ticker_data = await get_polygon_aggregates(ticker, timeframe)
+                strategy_data["data"][ticker] = ticker_data
+            except Exception as e:
+                strategy_data["data"][ticker] = {
+                    "error": f"Failed to fetch data for {ticker}: {str(e)}",
+                    "ticker": ticker
+                }
+
+        return strategy_data
+
+    except Exception as e:
+        return {
+            "error": f"Failed to fetch strategy historical data: {str(e)}",
+            "strategy_name": strategy_name,
+            "timeframe": timeframe
+        }
+
+@app.get("/strategy/{strategy_name}/chart-data")
+async def get_strategy_chart_data(
+    strategy_name: str,
+    backtest_id: str = Query(None, description="Backtest ID to include backtest results"),
+    timeframe: str = Query("1Y", description="Chart timeframe"),
+    benchmark: str = Query("SPY", description="Benchmark ticker for comparison")
+):
+    """
+    Fetch chart data for strategy visualization
+    Includes historical price data and optionally backtest results
+    """
+    try:
+        # Get strategy configuration (assuming it exists)
+        strategy_tickers = get_strategy_tickers(strategy_name)
+
+        chart_data = {
+            "strategy_name": strategy_name,
+            "backtest_id": backtest_id,
+            "timeframe": timeframe,
+            "benchmark": benchmark,
+            "generated_at": datetime.now().isoformat(),
+            "price_data": {},
+            "backtest_data": None
+        }
+
+        # Fetch price data for main ticker and benchmark
+        main_ticker = strategy_tickers[0] if strategy_tickers else "SOXX"
+
+        for ticker in [main_ticker, benchmark]:
+            try:
+                ticker_data = await get_polygon_aggregates(ticker, timeframe)
+                chart_data["price_data"][ticker] = {
+                    "ticker": ticker,
+                    "data": ticker_data,
+                    "role": "main" if ticker == main_ticker else "benchmark"
+                }
+            except Exception as e:
+                chart_data["price_data"][ticker] = {
+                    "error": f"Failed to fetch {ticker}: {str(e)}"
+                }
+
+        # If backtest_id provided, fetch backtest results from backtesting service
+        if backtest_id:
+            chart_data["backtest_data"] = await fetch_backtest_results(backtest_id)
+
+        return chart_data
+
+    except Exception as e:
+        return {
+            "error": f"Failed to generate chart data: {str(e)}",
+            "strategy_name": strategy_name
+        }
+
+@app.get("/strategy/{strategy_name}/performance-data")
+async def get_strategy_performance_data(
+    strategy_name: str,
+    backtest_id: str = Query(..., description="Backtest ID for performance data"),
+    include_trades: bool = Query(False, description="Include detailed trade history"),
+    include_daily_values: bool = Query(True, description="Include daily portfolio values")
+):
+    """
+    Fetch comprehensive performance data for a strategy backtest
+    Used for detailed performance analysis and charts
+    """
+    try:
+        # Fetch from backtesting service
+        backtest_results = await fetch_backtest_results(backtest_id)
+
+        if not backtest_results:
+            return {
+                "error": f"No backtest results found for ID: {backtest_id}",
+                "backtest_id": backtest_id
+            }
+
+        performance_data = {
+            "strategy_name": strategy_name,
+            "backtest_id": backtest_id,
+            "generated_at": datetime.now().isoformat(),
+            "metrics": backtest_results.get("metrics", {}),
+            "benchmark_metrics": backtest_results.get("benchmark_metrics", {}),
+            "risk_metrics": backtest_results.get("risk_metrics", {})
+        }
+
+        if include_daily_values:
+            performance_data["daily_values"] = backtest_results.get("daily_values", [])
+
+        if include_trades:
+            performance_data["trades"] = backtest_results.get("trades", [])
+            performance_data["trade_summary"] = backtest_results.get("trade_summary", {})
+
+        return performance_data
+
+    except Exception as e:
+        return {
+            "error": f"Failed to fetch performance data: {str(e)}",
+            "backtest_id": backtest_id
+        }
+
+# Helper functions for strategy data
+
+def get_strategy_tickers(strategy_name: str) -> list:
+    """Get list of tickers used by a strategy"""
+    strategy_configs = {
+        "nancy-p-chips": ["SOXX", "NVDA", "AMD"],
+        "pairs-trading": ["SPY", "QQQ"]
+    }
+    return strategy_configs.get(strategy_name, ["SOXX"])
+
+async def fetch_backtest_results(backtest_id: str):
+    """Fetch backtest results from backtesting service"""
+    import aiohttp
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"http://localhost:8001/backtest/{backtest_id}") as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    return None
+    except Exception as e:
+        print(f"Failed to fetch backtest results: {e}")
+        return None
 
 

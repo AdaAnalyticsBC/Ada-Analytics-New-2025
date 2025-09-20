@@ -129,23 +129,53 @@ class NancyPelosiChipsStrategy(bt.Strategy):
             print(f"Error in get_90d_moving_avg_return: {e}")
             return 0
 
+    def calculate_recent_volatility(self, periods=20):
+        """Calculate recent volatility for risk management"""
+        if len(self.soxx) < periods + 1:
+            return 0.02  # Default low volatility
+
+        try:
+            returns = []
+            for i in range(1, min(periods, len(self.soxx))):
+                if i < len(self.soxx):
+                    current_price = self.soxx.close[-i]
+                    prev_price = self.soxx.close[-(i + 1)]
+                    if prev_price > 0:
+                        ret = (current_price - prev_price) / prev_price
+                        returns.append(ret)
+
+            return np.std(returns) if returns else 0.02
+        except (IndexError, AttributeError):
+            return 0.02
+
     def execute_composer_logic(self):
         """Execute the Composer-style decision tree logic"""
         # Main condition: 5d cumulative return of SOXX > 5%
         soxx_5d_return = self.get_cumulative_return(self.soxx, 5)
 
-        if soxx_5d_return > 0.05:  # Greater than 5%
+        # Add volatility filter for better risk management
+        recent_volatility = self.calculate_recent_volatility()
+
+        # More aggressive approach for higher Sharpe ratio
+        if soxx_5d_return > 0.03:  # Even lower threshold for more opportunities
             # Check 1d return condition
             soxx_1d_return = self.get_cumulative_return(self.soxx, 1)
 
-            if soxx_1d_return < -0.02:  # Less than -2%
-                # Buy SOXL (Bull 3x)
-                self.log(f'SIGNAL: Buy SOXL - 5d return: {soxx_5d_return:.2%}, 1d return: {soxx_1d_return:.2%}')
-                return {'SOXL': 1.0}
+            # Strong momentum signal - be more aggressive
+            if soxx_1d_return < -0.02 and recent_volatility < 0.03:  # Strong signal in low vol
+                position_size = 1.2  # Leverage up in high-confidence situations
+                self.log(f'SIGNAL: Buy SOXL (STRONG pos: {position_size:.1f}) - 5d: {soxx_5d_return:.2%}, 1d: {soxx_1d_return:.2%}, vol: {recent_volatility:.1%}')
+                return {'SOXL': position_size}
+            elif soxx_1d_return < -0.01:  # Regular signal
+                position_size = 0.8 if recent_volatility > 0.025 else 1.0
+                self.log(f'SIGNAL: Buy SOXL (pos: {position_size:.1f}) - 5d: {soxx_5d_return:.2%}, 1d: {soxx_1d_return:.2%}, vol: {recent_volatility:.1%}')
+                return {'SOXL': position_size}
             else:
-                # Buy SOXS (Bear 3x)
-                self.log(f'SIGNAL: Buy SOXS - 5d return: {soxx_5d_return:.2%}, 1d return: {soxx_1d_return:.2%}')
-                return {'SOXS': 1.0}
+                # Only trade SOXS in very high volatility to avoid whipsaws
+                if recent_volatility < 0.025:
+                    position_size = 0.6
+                    self.log(f'SIGNAL: Buy SOXS (pos: {position_size:.1f}) - 5d: {soxx_5d_return:.2%}, 1d: {soxx_1d_return:.2%}, vol: {recent_volatility:.1%}')
+                    return {'SOXS': position_size}
 
         else:  # Bearish Mean Reversion branch
             if soxx_5d_return < -0.05:  # Less than -5%
@@ -165,31 +195,41 @@ class NancyPelosiChipsStrategy(bt.Strategy):
                 if self.nvda is not None and self.nvda_rsi8 is not None and len(self.nvda_rsi8) > 0:
                     nvda_rsi8_val = self.nvda_rsi8[0]
 
-                    if nvda_rsi8_val > 90:
-                        self.log(f'SIGNAL: Buy SOXS - NVDA RSI8 overbought: {nvda_rsi8_val:.1f}')
-                        return {'SOXS': 1.0}
+                    # More aggressive RSI thresholds
+                    if nvda_rsi8_val > 80:  # Even more aggressive
+                        # Very strong overbought - high confidence short
+                        position_size = 1.0 if nvda_rsi8_val > 90 else 0.7
+                        self.log(f'SIGNAL: Buy SOXS (pos: {position_size:.1f}) - NVDA RSI8 overbought: {nvda_rsi8_val:.1f}')
+                        return {'SOXS': position_size}
                     else:
                         # Check 3d RSI
                         if self.nvda_rsi3 is not None and len(self.nvda_rsi3) > 0:
                             nvda_rsi3_val = self.nvda_rsi3[0]
-                            if nvda_rsi3_val < 15:
-                                self.log(f'SIGNAL: Buy SOXL - NVDA RSI3 oversold: {nvda_rsi3_val:.1f}')
-                                return {'SOXL': 1.0}
+                            if nvda_rsi3_val < 25:  # More aggressive threshold
+                                # Very strong oversold - high confidence long
+                                position_size = 1.2 if nvda_rsi3_val < 15 else 0.9
+                                self.log(f'SIGNAL: Buy SOXL (pos: {position_size:.1f}) - NVDA RSI3 oversold: {nvda_rsi3_val:.1f}')
+                                return {'SOXL': position_size}
 
                 # AMD branch: Check 8d RSI first, then 3d RSI, then moving averages
                 if self.amd is not None and self.amd_rsi8 is not None and len(self.amd_rsi8) > 0:
                     amd_rsi8_val = self.amd_rsi8[0]
 
-                    if amd_rsi8_val > 90:
-                        self.log(f'SIGNAL: Buy SOXS - AMD RSI8 overbought: {amd_rsi8_val:.1f}')
-                        return {'SOXS': 1.0}
+                    # More aggressive AMD RSI thresholds
+                    if amd_rsi8_val > 80:  # More aggressive
+                        # Strong overbought signal
+                        position_size = 1.0 if amd_rsi8_val > 90 else 0.7
+                        self.log(f'SIGNAL: Buy SOXS (pos: {position_size:.1f}) - AMD RSI8 overbought: {amd_rsi8_val:.1f}')
+                        return {'SOXS': position_size}
                     else:
                         # Check 3d RSI
                         if self.amd_rsi3 is not None and len(self.amd_rsi3) > 0:
                             amd_rsi3_val = self.amd_rsi3[0]
-                            if amd_rsi3_val < 15:
-                                self.log(f'SIGNAL: Buy SOXL - AMD RSI3 oversold: {amd_rsi3_val:.1f}')
-                                return {'SOXL': 1.0}
+                            if amd_rsi3_val < 25:  # More aggressive threshold
+                                # Strong oversold signal
+                                position_size = 1.2 if amd_rsi3_val < 15 else 0.9
+                                self.log(f'SIGNAL: Buy SOXL (pos: {position_size:.1f}) - AMD RSI3 oversold: {amd_rsi3_val:.1f}')
+                                return {'SOXL': position_size}
 
                 # Moving average analysis (final fallback)
                 if len(self.soxx_sma10) > 0 and len(self.soxx_sma200) > 0:
@@ -245,18 +285,27 @@ class NancyPelosiChipsStrategy(bt.Strategy):
             current_position = self.getposition(self.soxx).size
 
             if 'SOXL' in allocation or 'SOXX' in allocation or 'NVDA' in allocation or 'AMD' in allocation:
+                # Get position size from allocation (default 1.0 if not specified)
+                position_weight = max(allocation.values()) if allocation else 1.0
+
                 if current_position <= 0:
-                    # Buy signal
-                    size = int(self.broker.getcash() / self.soxx.close[0])
+                    # Buy signal with position sizing
+                    max_size = int(self.broker.getcash() / self.soxx.close[0])
+                    size = int(max_size * position_weight)
                     if size > 0:
                         self.buy(data=self.soxx, size=size)
-                        self.log(f'BUY CREATE: {size} shares at {self.soxx.close[0]:.2f}')
+                        self.log(f'BUY CREATE: {size} shares (weight: {position_weight:.1f}) at {self.soxx.close[0]:.2f}')
 
             elif 'SOXS' in allocation:
+                # Get position size from allocation (default 1.0 if not specified)
+                position_weight = max(allocation.values()) if allocation else 1.0
+
                 if current_position > 0:
-                    # Sell signal (short proxy)
-                    self.sell(data=self.soxx, size=current_position)
-                    self.log(f'SELL CREATE: {current_position} shares at {self.soxx.close[0]:.2f}')
+                    # Sell signal (short proxy) with position sizing
+                    sell_size = int(current_position * position_weight)
+                    if sell_size > 0:
+                        self.sell(data=self.soxx, size=sell_size)
+                        self.log(f'SELL CREATE: {sell_size} shares (weight: {position_weight:.1f}) at {self.soxx.close[0]:.2f}')
 
             # Track daily portfolio value
             current_date = self.soxx.datetime.date(0)

@@ -4,3 +4,4 @@ datetime
 polygon-api-client
 pandas_market_calendars
 dotenv
+aiohttp
