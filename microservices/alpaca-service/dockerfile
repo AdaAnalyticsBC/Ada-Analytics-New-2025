@@ -1,0 +1,15 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN python -m venv .venv
+ENV PATH="/app/.venv/bin:$PATH"
+
+COPY requirements.txt .
+RUN .venv/bin/pip install -r requirements.txt
+
+COPY . .
+
+EXPOSE $PORT
+
+CMD [".venv/bin/python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "$PORT"]
