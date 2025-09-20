@@ -1,0 +1,95 @@
+{
+    "Strategy" : {
+        "name" : "Nancy Pelocy Chips Strategy",
+        "WEIGHT" : "equal",
+            "IF 5d cumualitve return of SOXX is greater than 5%" : {
+                "WEIGHT" : "equal",
+                "IF 1d cumulative return of SOXX is less than -2%" : {
+                    "SOXL" : "Direxion Daily Semiconductor Bull 3x Shares * ARCX"
+                },
+                "ELSE" : {
+                    "SOXS" : "Direxion Daily Semiconductor Bear 3x Shares * ARCX"
+                }
+            },
+            "ELSE" : {
+                "Bearish Mean Reversion" : {
+                    "WEIGHT" : "equal",
+                        "IF 5d cumulative return of SOXX is less than -5%" : {
+                            "WEIGHT" : "equal",
+                                "IF 1d cumulative return of SOXX is greater than 2%" : {
+                                    "SOXS" : "Direxion Daily Semiconductor Bear 3x Shares * ARCX"
+                                },
+                                "ELSE" : {
+                                    "SOXL" : "Direxion Daily Semiconductor Bull 3x Shares * ARCX"
+                                }
+
+                        },
+                        "ELSE" : {
+                            "WEIGHT" : "equal",
+                                "NVDA" : {
+                                    "WEIGHT" : "equal",
+                                        "IF 8d relative strentgh index of NVDA is greater than 90%" : {
+                                            "SOXS" : "Direxion Daily Semiconductor Bear 3x Shares * ARCX"
+                                        },
+                                        "ELSE" : {
+                                            "WEIGHT" : "equal",
+                                                "IF 3d relative strength index of NVDA is less than 15%" : {
+                                                    "SOXL" : "Direxion Daily Semiconductor Bull 3x Shares * ARCX"
+                                                },
+                                                "ELSE" :{
+                                                    "WEIGHT" : "equal",
+                                                    "IF 10d exponential moving average of price of SOXX is greater than 200d exponentnial moving average of price of SOXX" : {
+                                                        "WEIGHT" : "equal",
+                                                            "SORT 90d Moving Average of Return" : "Select Top 1",
+                                                                "SOXX" : "iShares Semiconductor ETF * XNAS",
+                                                                "NVDA" : "NVIDIA Corp * XNAS",
+                                                                "AMD" : "Advanced Micro Devices * XNAS",
+                                                                "XLE" : "Energy Select Sector SPDR Fund * ARCX",
+                                                                "ENPH" : "iShares Semiconductor ETF * XNAS"
+
+                                                    },
+                                                    "ELSE" : {
+                                                        "WEIGHT" : "equal",
+                                                            "SORT 90d Moving Average of Return" : "Select Top 2",
+                                                                "SPY" : "SPDR S&P * ARCX",
+                                                                "DBC" : "Invesco DB Commoditiy Index Tracking Fund * ARCX"
+                                                    }
+                                                }
+                                        }
+                                },
+                                "AMD" : {
+                                    "WEIGHT" : "equal",
+                                        "IF 8d relative strength index of AMD is greater than 90%" : {
+                                            "SOXS" :"Direxion Daily Semiconductor Bear 3x Shares * ARCX"
+                                        },
+                                        "ELSE" : {
+                                            "WEIGHT" : "equal",
+                                                "IF 3d relative strength index of AMD is less than 15%" : {
+                                                    "SOXL" : "Direxion Daily Semiconductor Bull 3x Shares * ARCX"
+                                                },  
+                                                "ELSE" : {
+                                                    "WEIGHT" : "equal",
+                                                        "IF 10d exponential moving average of price of SOXX is greater than 200d exponential moving average price of SOXX" : {
+                                                            "WEIGHT" : "equal",
+                                                                "SORT 90d Moving Average of Return" : "SELECT Top 1",
+                                                                    "SOXX" :"iShares Semiconductor ETF * XNAS",
+                                                                    "NVDA" :"NVIDIA Corp * XNAS",
+                                                                    "AMD" :"Advanced Micro Devices * XNAS",
+                                                                    "XLE" :"Energy Select Sector SPDR Fund * ARCX",
+                                                                    "ENPH" :"Enphasisis Energy Inc * XNAS"
+                                                        },
+                                                        "ELSE" : {
+                                                            "WEIGHT" : "equal",
+                                                                "SORT 90d Moving Average of Return" : "SELECT Top 2",
+                                                                    "SPY" :"SPDR S&P * ARCX",
+                                                                    "DBC" : "Invesco DB Commoditiy Index Tracking Fund * ARCX",     
+                                                                    "XLE" : "Energy Select Sector SPDR Fund * ARCX"                                                   
+                                                        }
+                                                }
+                                        }
+                                }
+                        }
+                    }
+            }
+    }
+}

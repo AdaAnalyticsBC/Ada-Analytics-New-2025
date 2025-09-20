@@ -1,3 +1,13 @@
 fastapi[standard]
 datetime
 dotenv
+pyyaml
+APScheduler
+pytz
+backtrader
+pandas
+numpy
+yfinance
+scipy
+requests
+websocket-client
